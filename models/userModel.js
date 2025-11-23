@@ -22,6 +22,8 @@ const userSchema = new mongoose.Schema({
     bio : {
         type : String,
     },
+    resetOtpHash: { type: String },
+    resetOtpExpire: { type: String },
 }, {timestamps : true});
 
 
