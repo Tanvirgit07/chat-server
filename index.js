@@ -1,42 +1,37 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const PORT = process.env.PORT || 5000;
-const http = require('http');
+const http = require("http");
 const connectBD = require("./lib/dbconnection");
 
+// create express app & server
 const app = express();
 const server = http.createServer(app);
 
+// SOCKET INIT
+const initSocket = require("./socket");
+const { io, userSocketMap } = initSocket(server);
 
+// middlewares
+app.use(express.json({ limit: "5mb" }));
+app.use(cors({ origin: "*" }));
 
-app.use(express.json({limit: '4mb'}));
-app.use(cors({
-    origin: "*",
-}));
-
-
+// connect DB
 connectBD();
 
-app.use('/', (req,res) => {
-    res.send("Server is running");
-})
+// basic route
+app.get("/", (req, res) => res.send("Server running"));
 
-
-server.listen(PORT, () => {
-    console.log(`Server is running http://localhost:${PORT}`)
-})
-
-
-
-
-// global error handler 
-app.use((err,req,res,next) => {
-    const statusCode = err.statusCode || 500;
-    const message = err.message || "Internal Server Error!";
-    res.status(statusCode).json({
-        success : false,
-        statusCode,
-        message,
+// global error handler
+app.use((err, req, res, next) => {
+    res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || "Internal Server Error"
     });
-})
+});
+
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+// export io and map for controllers
+module.exports = { io, userSocketMap };

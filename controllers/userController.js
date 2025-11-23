@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const handleError = require("../lib/HandleError");
 const jwt = require("jsonwebtoken");
 const sendMail = require("../lib/mailsend");
-const cloudinary = require("../");
+const cloudinary = require("../../cloudinary/cloudinaryConfig");
 
 const createrUser = async (req, res, next) => {
   const { fullName, email, password, bio } = req.body;
