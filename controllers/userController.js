@@ -8,9 +8,9 @@ const fs = require("fs");
 
 
 const createrUser = async (req, res, next) => {
-  const { fullName, email, password, bio } = req.body;
+  const { fullName, email, password } = req.body;
   try {
-    if (!fullName || !email || !password || !bio) {
+    if (!fullName || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fildes are required !",
@@ -31,7 +31,6 @@ const createrUser = async (req, res, next) => {
       fullName: fullName.trim(),
       email: email.trim(),
       password: hashPassword,
-      bio: bio,
     });
 
     res.status(200).json({
