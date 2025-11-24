@@ -3,13 +3,15 @@ const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const connectBD = require("./lib/dbconnection");
+const userRouter = require("./routers/userRoute");
 
 // create express app & server
 const app = express();
 const server = http.createServer(app);
 
 // SOCKET INIT
-const initSocket = require("./socket");
+const initSocket = require("./lib/socketio");
+
 const { io, userSocketMap } = initSocket(server);
 
 // middlewares
@@ -18,6 +20,9 @@ app.use(cors({ origin: "*" }));
 
 // connect DB
 connectBD();
+
+
+app.use('/api/v1/user', userRouter);
 
 // basic route
 app.get("/", (req, res) => res.send("Server running"));

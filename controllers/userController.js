@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const handleError = require("../lib/HandleError");
 const jwt = require("jsonwebtoken");
 const sendMail = require("../lib/mailsend");
-const cloudinary = require("../../cloudinary/cloudinaryConfig");
+const { cloudinary_js_config } = require("../lib/cloudinary");
 
 const createrUser = async (req, res, next) => {
   const { fullName, email, password, bio } = req.body;
@@ -45,9 +45,8 @@ const createrUser = async (req, res, next) => {
 const signIn = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: "Email/Phone and password are required !",
       });
@@ -265,7 +264,9 @@ const updateUser = async (req, res, next) => {
 
     if (req.file) {
       try {
-        const uploadResult = await cloudinary.uploader.upload(req.file.path);
+        const uploadResult = await cloudinary_js_config.uploader.upload(
+          req.file.path
+        );
 
         updateData.profileImage = uploadResult.secure_url;
         fs.unlinkSync(req.file.path);
@@ -302,4 +303,5 @@ module.exports = {
   forgotPassword,
   varifyOtp,
   resetPassword,
+  updateUser,
 };
