@@ -254,15 +254,7 @@ const updateUser = async (req, res, next) => {
   try {
     const userId = req.user._id.toString();
     const { fullName, bio } = req.body;
-    if (!fullName || !bio) {
-      return res.status(400).json({ message: "All fields are required!" });
-    }
-
-    // For image validation
-    if (!req.file) {
-      return res.status(400).json({ message: "Image field is required!" });
-    }
-
+    
     // Prepare update object
     const updateData = {
       fullName,
