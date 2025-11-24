@@ -3,7 +3,9 @@ const bcrypt = require("bcrypt");
 const handleError = require("../lib/HandleError");
 const jwt = require("jsonwebtoken");
 const sendMail = require("../lib/mailsend");
-const { cloudinary_js_config } = require("../lib/cloudinary");
+const cloudinary = require("../lib/cloudinary");
+const fs = require("fs");
+
 
 const createrUser = async (req, res, next) => {
   const { fullName, email, password, bio } = req.body;
@@ -251,38 +253,35 @@ const resetPassword = async (req, res, next) => {
 
 const updateUser = async (req, res, next) => {
   try {
-    const { userId } = req.params;
-    const { fullName, email, bio, profileImage } = req.body;
+    const userId = req.user._id.toString();
+    const { fullName, bio } = req.body;
+    if (!fullName || !bio) {
+      return res.status(400).json({ message: "All fields are required!" });
+    }
 
+    // For image validation
+    if (!req.file) {
+      return res.status(400).json({ message: "Image field is required!" });
+    }
+
+    // Prepare update object
     const updateData = {
-      email,
       fullName,
-      password,
-      profileImage,
       bio,
     };
 
+    // Upload image to Cloudinary
     if (req.file) {
-      try {
-        const uploadResult = await cloudinary_js_config.uploader.upload(
-          req.file.path
-        );
+      const upload = await cloudinary.uploader.upload(req.file.path);
 
-        updateData.profileImage = uploadResult.secure_url;
-        fs.unlinkSync(req.file.path);
-      } catch (uploadErr) {
-        return next(
-          handleError(500, "Image upload failed: " + uploadErr.message)
-        );
-      }
-    } else if (profileImage) {
-      updateData.profileImage = profileImage;
+      updateData.profileImage = upload.secure_url;
+      fs.unlinkSync(req.file.path);
     }
-
-    const updatedUser = await UserModel.findByIdAndUpdate(userId, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true }
+    );
 
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
@@ -292,8 +291,10 @@ const updateUser = async (req, res, next) => {
       message: "User updated successfully",
       user: updatedUser,
     });
+
   } catch (err) {
-    next(handleError(500, err.message));
+    console.error(err);
+    res.status(500).json({ message: err.message });
   }
 };
 
