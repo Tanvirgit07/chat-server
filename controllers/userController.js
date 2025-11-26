@@ -290,17 +290,26 @@ const updateUser = async (req, res, next) => {
 };
 
 
-const getAllusers = async (req,res,next) => {
+const getSingleUser = async (req, res, next) => {
   try {
-    const users = await UserModel.find({_id: {$ne: req.user._id}}).select('-password -resetOtpHash -resetOtpExpire');
+    const userId = req.params.id; // URL থেকে user ID
+
+    const user = await UserModel.findById(userId)
+      .select("-password -resetOtpHash -resetOtpExpire");
+
+    if (!user) {
+      return next(handleError(404, "User not found"));
+    }
+
     res.status(200).json({
       success: true,
-      users
+      user,
     });
   } catch (err) {
     next(handleError(500, err.message));
   }
-}
+};
+
 
 module.exports = {
   createrUser,
@@ -309,5 +318,5 @@ module.exports = {
   varifyOtp,
   resetPassword,
   updateUser,
-  getAllusers,
+  getSingleUser,
 };
