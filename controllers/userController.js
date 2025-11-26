@@ -289,6 +289,19 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+
+const getAllusers = async (req,res,next) => {
+  try {
+    const users = await UserModel.find({_id: {$ne: req.user._id}}).select('-password -resetOtpHash -resetOtpExpire');
+    res.status(200).json({
+      success: true,
+      users
+    });
+  } catch (err) {
+    next(handleError(500, err.message));
+  }
+}
+
 module.exports = {
   createrUser,
   signIn,
@@ -296,4 +309,5 @@ module.exports = {
   varifyOtp,
   resetPassword,
   updateUser,
+  getAllusers,
 };

@@ -1,43 +1,29 @@
-const messageModel = require("../models/messageModel");
 const handleError = require("../lib/HandleError");
 const UserModel = require("../models/userModel");
-const { io, userSocketMap } = require("../index");
+const { getIo, getUserSocketMap } = require("../lib/socketio");
+const MessageModel = require("../models/messageModel");
+const fs = require("fs");
+const cloudinary = require("../lib/cloudinary");
 
 const getUsersForSidebar = async (req, res, next) => {
   try {
-    // Logged in user (Receiver)
     const userId = req.user._id;
+    const filteredUsers = await UserModel.find({ _id: { $ne: userId } }).select("-password");
 
-    // Sidebar e sob user (nijeke bad diye)
-    const filteredUsers = await UserModel.find({ _id: { $ne: userId } }).select(
-      "-password"
-    );
-
-    // Unseen message count store korar object
     const unseenMessages = {};
-
-    // Loop every user (Sender)
     const promises = filteredUsers.map(async (user) => {
-      // senderId = sidebar user
-      // receiverId = logged in user
       const messages = await MessageModel.find({
         senderId: user._id,
         receiverId: userId,
         seen: false,
       });
-
       if (messages.length > 0) {
         unseenMessages[user._id] = messages.length;
       }
     });
-
     await Promise.all(promises);
 
-    res.json({
-      success: true,
-      users: filteredUsers,
-      unseenMessages,
-    });
+    res.json({ success: true, users: filteredUsers, unseenMessages });
   } catch (err) {
     next(handleError(500, err.message));
   }
@@ -48,69 +34,86 @@ const getSelectedMessage = async (req, res, next) => {
     const { id: selectedUserId } = req.params;
     const myId = req.user._id;
 
-    const message = await messageModel.find({
+    await MessageModel.updateMany(
+      { senderId: selectedUserId, receiverId: myId, seen: false },
+      { seen: true }
+    );
+
+    const message = await MessageModel.find({
       $or: [
         { senderId: myId, receiverId: selectedUserId },
         { senderId: selectedUserId, receiverId: myId },
       ],
-    });
+    }).sort({ createdAt: 1 });
 
-    // read This message
-    await messageModel.updateMany(
-      { senderId: selectedUserId, receiverId: myId },
-      { seen: true }
-    );
-
-    res.json({
-      success: true,
-      message,
-    });
+    res.json({ success: true, message });
   } catch (err) {
     next(handleError(500, err.message));
   }
 };
 
-// api to make massages as seen using meessage id
 const markMessageAsSeen = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    await messageModel.findByIdAndUpdate(id, { seen: true });
-    res.json({
-      success: true,
-    });
+    const { messageIds } = req.body;
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ success: false, message: "messageIds required" });
+    }
+
+    await MessageModel.updateMany(
+      { _id: { $in: messageIds } },
+      { seen: true }
+    );
+
+    res.json({ success: true });
   } catch (err) {
     next(handleError(500, err.message));
   }
 };
 
 const sendMessage = async (req, res, next) => {
-    try {
-        const { text, image } = req.body;
-        const receiverId = req.params.id;
-        const senderId = req.user._id;
+  try {
+    const { text } = req.body;
+    const receiverId = req.params.receiverId;
+    const senderId = req.user._id;
 
-        let imageUrl = null;
-
-        if (image) {
-            const Result = await cloudinary.uploader.upload(image, { folder: "chat_images" });
-            imageUrl = Result.secure_url;
-        }
-
-        const newMessage = await messageModel.create({
-            senderId,
-            receiverId,
-            text,
-            image: imageUrl
-        });
-
-        const receiverSocketId = userSocketMap[receiverId];
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("newMessage", newMessage);
-        }
-
-        res.json({ success: true, data: newMessage });
-
-    } catch (err) {
-        next(handleError(500, err.message));
+    if (!text && !req.file) {
+      return next(handleError(400, "Message text or image required"));
     }
+
+    let imageUrl = null;
+    if (req.file) {
+      const result = await cloudinary.uploader.upload(req.file.path, { folder: "chat_images" });
+      imageUrl = result.secure_url;
+      fs.unlink(req.file.path, () => {});
+    }
+
+    const newMessage = await MessageModel.create({
+      senderId,
+      receiverId,
+      text: text || "",
+      image: imageUrl,
+    });
+
+    // শুধু রিসিভারকে পাঠাও (সেন্ডারকে না)
+    const io = getIo();
+    const userSocketMap = getUserSocketMap();
+    const receiverSocketId = userSocketMap[receiverId];
+
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
+
+    // সেন্ডারকে কিছু পাঠানোর দরকার নেই – ফ্রন্টএন্ডে ইতিমধ্যে দেখানো হয়ে গেছে
+    return res.json({ success: true, data: newMessage });
+  } catch (err) {
+    console.error("Message Send Error:", err);
+    next(handleError(500, err.message));
+  }
+};
+
+module.exports = {
+  getUsersForSidebar,
+  getSelectedMessage,
+  markMessageAsSeen,
+  sendMessage,
 };
