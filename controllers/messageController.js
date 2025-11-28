@@ -72,39 +72,65 @@ const markMessageAsSeen = async (req, res, next) => {
 
 const sendMessage = async (req, res, next) => {
   try {
-    const { text } = req.body;
+    const { 
+      text, 
+      replyTo, 
+      replyToText = "", 
+      replyToImage, 
+      replyToSenderName = "" 
+    } = req.body;
+    
     const receiverId = req.params.receiverId;
     const senderId = req.user._id;
 
-    if (!text && !req.file) {
-      return next(handleError(400, "Message text or image required"));
+    if (!text?.trim() && !req.file && !replyTo) {
+      return next(handleError(400, "Message text or image or reply required"));
     }
 
     let imageUrl = null;
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, { folder: "chat_images" });
+      const result = await cloudinary.uploader.upload(req.file.path, { 
+        folder: "chat_images" 
+      });
       imageUrl = result.secure_url;
       fs.unlink(req.file.path, () => {});
     }
 
-    const newMessage = await MessageModel.create({
+    const messageData = {
       senderId,
       receiverId,
-      text: text || "",
+      text: text?.trim() || "",
       image: imageUrl,
-    });
+      replyTo: replyTo || null,
+      replyToText: replyToText || "",
+      replyToImage: replyToImage || null,
+      replyToSenderName: replyToSenderName || "",
+    };
 
-    // শুধু রিসিভারকে পাঠাও (সেন্ডারকে না)
+    const newMessage = await MessageModel.create(messageData);
+
+    // Populate করে পাঠাও যাতে frontend এ সব ডাটা থাকে
+    const populatedMessage = await MessageModel.findById(newMessage._id)
+      .populate("senderId", "fullName profileImage")
+      .lean();
+
+    const messageToSend = {
+      ...populatedMessage,
+      _id: populatedMessage._id.toString(),
+      senderId: populatedMessage.senderId._id.toString(),
+      receiverId: populatedMessage.receiverId.toString(),
+    };
+
+    // Real-time: শুধু রিসিভারকে পাঠাও
     const io = getIo();
     const userSocketMap = getUserSocketMap();
     const receiverSocketId = userSocketMap[receiverId];
 
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
+      io.to(receiverSocketId).emit("newMessage", messageToSend);
     }
 
-    // সেন্ডারকে কিছু পাঠানোর দরকার নেই – ফ্রন্টএন্ডে ইতিমধ্যে দেখানো হয়ে গেছে
-    return res.json({ success: true, data: newMessage });
+    return res.json({ success: true, data: messageToSend });
   } catch (err) {
     console.error("Message Send Error:", err);
     next(handleError(500, err.message));
