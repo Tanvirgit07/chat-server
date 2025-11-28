@@ -113,35 +113,20 @@ const sendMessage = async (req, res, next) => {
 
 
 const editMessage = async (req, res, next) => {
-   try {
+  try {
     const { messageId } = req.params;
     const { newText } = req.body;
     const userId = req.user._id;
-
-    console.log("userId", userId)
 
     if (!newText || newText.trim() === "") {
       return res.status(400).json({ success: false, message: "Text is required" });
     }
 
     const message = await MessageModel.findById(messageId);
-
-    // ☑ Important: message null হলে return করবে
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
 
-    // ☑ Important: senderId আছে কিনা চেক করো
-    if (!message.senderId) {
-      return res.status(400).json({ success: false, message: "Message senderId is missing" });
-    }
-
-    // ☑ Important: userId undefined হলে error
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "UserId missing from token" });
-    }
-
-    // Compare safely
     if (message.senderId.toString() !== userId.toString()) {
       return res.status(403).json({
         success: false,
@@ -149,31 +134,47 @@ const editMessage = async (req, res, next) => {
       });
     }
 
-    message.text = newText;
+    // আপডেট করো
+    message.text = newText.trim();
     message.edited = true;
-
     await message.save();
 
-    return res.json({ success: true, message: "Message edited", data: message });
+    // Real-time দুই পাশেই পাঠাও
+    const io = getIo();
+    const userSocketMap = getUserSocketMap();
+
+    const senderSocketId = userSocketMap[message.senderId.toString()];
+    const receiverSocketId = userSocketMap[message.receiverId.toString()];
+
+    const updatedMessage = message.toObject();
+    updatedMessage.edited = true;
+
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messageEdited", updatedMessage);
+    }
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("messageEdited", updatedMessage);
+    }
+
+    return res.json({ success: true, message: "Message edited", data: updatedMessage });
 
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: "Server error" });
   }
-}
-
+};
 const deleteMessageForme = async (req, res, next) => {
   try {
     const { messageId } = req.params;
     const userId = req.user._id;
 
     const message = await MessageModel.findById(messageId);
-
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
 
     // Already deleted?
+    if (!message.deletedBy) message.deletedBy = [];
     if (message.deletedBy.includes(userId)) {
       return res.json({ success: true, message: "Already deleted for you" });
     }
@@ -181,21 +182,32 @@ const deleteMessageForme = async (req, res, next) => {
     message.deletedBy.push(userId);
     await message.save();
 
+    // Real-time: শুধু নিজের কাছে পাঠাও
+    const io = getIo();
+    const userSocketMap = getUserSocketMap();
+    const deleterSocketId = userSocketMap[userId.toString()];
+
+    if (deleterSocketId) {
+      io.to(deleterSocketId).emit("messageDeleted", {
+        messageId: messageId,
+        deletedFor: [userId.toString()]
+      });
+    }
+
     return res.json({ success: true, message: "Message deleted for me" });
 
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: "Server error" });
   }
-}
+};
 
-const deleteMessageForEveryone = async (req,res,next) => {
+const deleteMessageForEveryone = async (req, res, next) => {
   try {
     const { messageId } = req.params;
     const userId = req.user._id;
 
     const message = await MessageModel.findById(messageId);
-
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
@@ -207,7 +219,27 @@ const deleteMessageForEveryone = async (req,res,next) => {
       });
     }
 
+    // মেসেজ ডিলিট করো ডাটাবেস থেকে
     await MessageModel.findByIdAndDelete(messageId);
+
+    // Real-time: দুই পাশেই পাঠাও
+    const io = getIo();
+    const userSocketMap = getUserSocketMap();
+
+    const senderSocketId = userSocketMap[message.senderId.toString()];
+    const receiverSocketId = userSocketMap[message.receiverId.toString()];
+
+    const deletePayload = {
+      messageId: messageId,
+      deletedForEveryone: true
+    };
+
+    if (senderSocketId) {
+      io.to(senderSocketId).emit("messageDeleted", deletePayload);
+    }
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("messageDeleted", deletePayload);
+    }
 
     return res.json({ success: true, message: "Message deleted for everyone" });
 
@@ -215,7 +247,7 @@ const deleteMessageForEveryone = async (req,res,next) => {
     console.log(error);
     return res.status(500).json({ success: false, message: "Server error" });
   }
-}
+};
 
 
 module.exports = {
