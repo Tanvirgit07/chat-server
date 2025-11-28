@@ -111,9 +111,119 @@ const sendMessage = async (req, res, next) => {
   }
 };
 
+
+const editMessage = async (req, res, next) => {
+   try {
+    const { messageId } = req.params;
+    const { newText } = req.body;
+    const userId = req.user._id;
+
+    console.log("userId", userId)
+
+    if (!newText || newText.trim() === "") {
+      return res.status(400).json({ success: false, message: "Text is required" });
+    }
+
+    const message = await MessageModel.findById(messageId);
+
+    // ☑ Important: message null হলে return করবে
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    // ☑ Important: senderId আছে কিনা চেক করো
+    if (!message.senderId) {
+      return res.status(400).json({ success: false, message: "Message senderId is missing" });
+    }
+
+    // ☑ Important: userId undefined হলে error
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "UserId missing from token" });
+    }
+
+    // Compare safely
+    if (message.senderId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only edit your own messages"
+      });
+    }
+
+    message.text = newText;
+    message.edited = true;
+
+    await message.save();
+
+    return res.json({ success: true, message: "Message edited", data: message });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+const deleteMessageForme = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user._id;
+
+    const message = await MessageModel.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    // Already deleted?
+    if (message.deletedBy.includes(userId)) {
+      return res.json({ success: true, message: "Already deleted for you" });
+    }
+
+    message.deletedBy.push(userId);
+    await message.save();
+
+    return res.json({ success: true, message: "Message deleted for me" });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+const deleteMessageForEveryone = async (req,res,next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user._id;
+
+    const message = await MessageModel.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: "Message not found" });
+    }
+
+    if (message.senderId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Only sender can delete the message for everyone"
+      });
+    }
+
+    await MessageModel.findByIdAndDelete(messageId);
+
+    return res.json({ success: true, message: "Message deleted for everyone" });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+
 module.exports = {
   getUsersForSidebar,
   getSelectedMessage,
   markMessageAsSeen,
   sendMessage,
+  editMessage,
+  deleteMessageForme,
+  deleteMessageForEveryone
 };
