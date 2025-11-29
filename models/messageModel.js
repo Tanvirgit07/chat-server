@@ -14,16 +14,18 @@ const messageSchema = new mongoose.Schema(
     },
     messageType: {
       type: String,
-      enum: ["text", "image", "file", "video"],
+      enum: ["text", "image", "file", "video", "voice"], // ← voice যোগ হয়েছে
       default: "text",
     },
     text: { type: String },
     image: { type: String },
+    voice: { type: String },           // ← নতুন
+    voiceDuration: { type: Number },   // ← সেকেন্ডে (অপশনাল)
     seen: { type: Boolean, default: false },
     edited: { type: Boolean, default: false },
     deletedBy: { type: [mongoose.Schema.Types.ObjectId], default: [] },
 
-    // নতুন যোগ করা Reply ফিল্ড
+    // Reply fields
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "message",
@@ -31,7 +33,7 @@ const messageSchema = new mongoose.Schema(
     },
     replyToText: { type: String, default: "" },
     replyToImage: { type: String },
-    replyToSenderName: { type: String }, // যিনি পাঠিয়েছেন তার নাম
+    replyToSenderName: { type: String },
   },
   { timestamps: true }
 );
